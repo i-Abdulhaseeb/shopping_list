@@ -16,31 +16,26 @@ class GroceryList extends StatefulWidget {
 
 class GrocerylistState extends State<GroceryList> {
   List<GroceryItem> _groceryItems = [];
-  var isLoading = true;
+  late Future<List<GroceryItem>> loadeditems;
   String? _error;
   @override
   void initState() {
     // TODO: implement initState
     super.initState();
-    _loadItems();
+    loadeditems = _loadItems();
   }
 
-  void _loadItems() async {
+  Future<List<GroceryItem>> _loadItems() async {
     final url = Uri.https(
       'flutter-prep-dd52d-default-rtdb.firebaseio.com',
       'shopping-list.json',
     );
     final response = await http.get(url);
     if (response.statusCode >= 400) {
-      setState(() {
-        _error = "Failed to fetch data , please try again";
-      });
+      throw Exception("Failed to get items");
     }
     if (response.body == 'null') {
-      setState(() {
-        isLoading = false;
-      });
-      return;
+      return [];
     }
     final List<GroceryItem> loadedItemsList = [];
     final Map<String, dynamic> listData = json.decode(response.body);
@@ -57,11 +52,8 @@ class GrocerylistState extends State<GroceryList> {
         ),
       );
     }
-    if (!mounted) return;
-    setState(() {
-      _groceryItems = loadedItemsList;
-      isLoading = false;
-    });
+
+    return loadedItemsList;
   }
 
   void _addItem() async {
@@ -107,44 +99,51 @@ class GrocerylistState extends State<GroceryList> {
         ),
         actions: [IconButton(onPressed: _addItem, icon: Icon(Icons.add))],
       ),
-      body: _error != null
-          ? Center(child: Text(_error!))
-          : isLoading
-          ? Center(child: CircularProgressIndicator())
-          : _groceryItems.isEmpty
-          ? Center(
+      body: FutureBuilder(
+        future: loadeditems,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return Center(child: CircularProgressIndicator());
+          } else if (snapshot.hasError) {
+            return Center(child: Text(snapshot.error.toString()));
+          } else if (snapshot.data!.isEmpty) {
+            return Center(
               child: Text(
-                "No Grocery Item",
+                "No Items to display",
                 style: TextStyle(fontWeight: FontWeight.bold, fontSize: 28),
               ),
-            )
-          : ListView.builder(
-              itemCount: _groceryItems.length,
+            );
+          } else {
+            return ListView.builder(
+              itemCount: snapshot.data!.length,
 
               itemBuilder: (ctx, index) => Dismissible(
                 direction: DismissDirection.endToStart,
                 onDismissed: (direction) {
-                  _removeItem(_groceryItems[index]);
+                  _removeItem(snapshot.data![index]);
                 },
-                key: ValueKey(_groceryItems[index].id),
+                key: ValueKey(snapshot.data![index].id),
                 child: ListTile(
                   onTap: () {},
                   title: Text(
-                    _groceryItems[index].name,
+                    snapshot.data![index].name,
                     style: TextStyle(fontSize: 18),
                   ),
                   leading: Container(
                     width: 24,
                     height: 24,
-                    color: _groceryItems[index].category.whatColor,
+                    color: snapshot.data![index].category.whatColor,
                   ),
                   trailing: Text(
-                    _groceryItems[index].quantity.toString(),
+                    snapshot.data![index].quantity.toString(),
                     style: TextStyle(fontSize: 16),
                   ),
                 ),
               ),
-            ),
+            );
+          }
+        },
+      ),
     );
   }
 }
